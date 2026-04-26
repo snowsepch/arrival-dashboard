@@ -151,7 +151,8 @@
         <div class="upload-card-sub" id="sub-third">4/27副廠庫存.xls</div>
       </div>
     </div>
-    <button class="btn-update" id="btnUpdate" onclick="runUpdate()" disabled>更新完成後點此計算</button>
+    <button class="btn-update" id="btnUpdate" onclick="runUpdate()" disabled>計算到貨提醒</button>
+    <div id="uploadHint" style="font-size:11px;color:#8e8e93;margin-top:6px;text-align:center">只傳客訂檔時會自動沿用上次庫存資料</div>
   </div>
 
   <!-- Stats -->
@@ -250,6 +251,7 @@ let currentData = null;
 let currentTab = 'apple';
 let activeFilter = 'all';
 const STORAGE_KEY = 'arrival_dashboard_v2';
+const STORAGE_INV  = 'arrival_inventory_v1';
 
 // ── Excel date conversion ────────────────────────────────────────────────
 function excelDate(serial) {
@@ -447,16 +449,19 @@ function parseInventory(wb) {
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
   if (rows.length < 2) return {};
-  const hdr = rows[0];
+  const hdr = rows[0].map(h => String(h||'').trim().toLowerCase());
+  // Fallback to known positional indices if header names not found (e.g. encoding failure)
+  const FALLBACK = {comp_item_no:10, comp_item_nam:11, comp_model_no:12, comp_stk_tot:14, comp_desc_c:7};
   const idx = {};
   ['comp_item_no','comp_item_nam','comp_model_no','comp_stk_tot','comp_desc_c'].forEach(k => {
-    idx[k] = hdr.indexOf(k);
+    const found = hdr.indexOf(k);
+    idx[k] = found >= 0 ? found : FALLBACK[k];
   });
   const inv = {};
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
     const no = String(r[idx.comp_item_no]||'').trim();
-    if (!no) continue;
+    if (!no || !/^\d+$/.test(no)) continue;
     const stk = parseFloat(r[idx.comp_stk_tot])||0;
     inv[no] = {
       itemName: r[idx.comp_item_nam]||'',
@@ -525,7 +530,6 @@ function checkUpdateReady() {
 // ── Run update ───────────────────────────────────────────────────────────
 function runUpdate() {
   const base = currentData || INITIAL_DATA;
-  // Use new data if uploaded, otherwise keep existing parsed data
   let orders = null, appleInv = null, thirdInv = null;
   const meta = {
     orderFile: base.orderFile,
@@ -546,17 +550,36 @@ function runUpdate() {
     meta.thirdStockFile = pending.third.name.replace(/\.(xlsx?|xls)$/i,'');
   }
 
-  // If only some files updated, we need to re-compute from scratch
-  // For simplicity: if all 3 new files uploaded, full recompute
-  // Otherwise, update stored data with new inventory data only
-  if (orders && appleInv && thirdInv) {
-    const newData = computeAlerts(orders, appleInv, thirdInv, meta);
-    saveData(newData);
-    render(newData);
-    alert(`更新完成！Apple 原廠：${newData.appleAlerts.length} 筆 ／ 副廠：${newData.thirdAlerts.length} 筆`);
-  } else {
-    alert('請同時上傳三個檔案（客訂 + Apple原廠庫存 + 副廠庫存）以重新計算。\n若只更新庫存，請一次上傳全部三個檔案。');
+  // Save newly uploaded inventory to localStorage
+  if (pending.apple || pending.third) {
+    saveInventory(appleInv || {}, thirdInv || {}, meta);
   }
+
+  // Fall back to cached inventory if not uploaded this time
+  const cached = loadInventory();
+  let usedCache = false;
+  if (!appleInv && cached && cached.appleInv) {
+    appleInv = cached.appleInv;
+    meta.appleStockFile = cached.appleStockFile || meta.appleStockFile;
+    usedCache = true;
+  }
+  if (!thirdInv && cached && cached.thirdInv) {
+    thirdInv = cached.thirdInv;
+    meta.thirdStockFile = cached.thirdStockFile || meta.thirdStockFile;
+    usedCache = true;
+  }
+
+  if (!orders) { alert('請上傳客訂檔案。'); return; }
+  if (!appleInv || !thirdInv) {
+    alert('缺少庫存資料。\n請同時上傳 Apple 原廠庫存 + 副廠庫存，或先前已上傳過（會自動沿用）。');
+    return;
+  }
+
+  const newData = computeAlerts(orders, appleInv, thirdInv, meta);
+  saveData(newData);
+  render(newData);
+  const aCount = Object.keys(appleInv).length, tCount = Object.keys(thirdInv).length;
+  alert(`更新完成！\n客訂解析 ${orders.length} 筆未出貨訂單\nApple庫存 ${aCount} 項，副廠庫存 ${tCount} 項${usedCache ? '（沿用上次庫存）' : ''}\n\n結果：Apple 原廠 ${newData.appleAlerts.length} 筆 ／ 副廠 ${newData.thirdAlerts.length} 筆`);
 }
 
 // ── LocalStorage ─────────────────────────────────────────────────────────
@@ -567,6 +590,24 @@ function saveData(data) {
 function loadData() {
   try {
     const s = localStorage.getItem(STORAGE_KEY);
+    if (s) return JSON.parse(s);
+  } catch(e) {}
+  return null;
+}
+
+function saveInventory(appleInv, thirdInv, meta) {
+  try {
+    localStorage.setItem(STORAGE_INV, JSON.stringify({
+      appleInv, thirdInv,
+      appleStockFile: meta.appleStockFile,
+      thirdStockFile: meta.thirdStockFile
+    }));
+  } catch(e) {}
+}
+
+function loadInventory() {
+  try {
+    const s = localStorage.getItem(STORAGE_INV);
     if (s) return JSON.parse(s);
   } catch(e) {}
   return null;
