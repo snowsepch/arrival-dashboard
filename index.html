@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>到貨提醒儀表板</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'PingFang TC','Heiti TC',sans-serif;background:#f2f2f7;color:#1c1c1e;font-size:14px}
+  .header{background:#fff;border-bottom:1px solid #e5e5ea;padding:16px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
+  .header-logo{width:28px;height:28px;background:#1c1c1e;border-radius:6px;display:flex;align-items:center;justify-content:center}
+  .header-logo svg{width:18px;height:18px;fill:#fff}
+  .header h1{font-size:18px;font-weight:600;flex:1}
+  .header-meta{font-size:12px;color:#8e8e93}
+  .container{max-width:1200px;margin:0 auto;padding:20px}
+
+  /* Upload section */
+  .upload-section{background:#fff;border-radius:12px;padding:16px 20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .upload-title{font-size:13px;font-weight:600;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px}
+  .upload-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .upload-card{border:1.5px dashed #c7c7cc;border-radius:10px;padding:12px;cursor:pointer;transition:all .2s;text-align:center;position:relative}
+  .upload-card:hover{border-color:#007aff;background:#f0f6ff}
+  .upload-card.loaded{border-color:#34c759;border-style:solid;background:#f0fdf4}
+  .upload-card input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+  .upload-card-icon{font-size:22px;margin-bottom:4px}
+  .upload-card-label{font-size:12px;font-weight:600;color:#1c1c1e}
+  .upload-card-sub{font-size:11px;color:#8e8e93;margin-top:2px}
+  .upload-card.loaded .upload-card-sub{color:#34c759}
+  .btn-update{display:block;width:100%;margin-top:12px;padding:10px;background:#007aff;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .2s}
+  .btn-update:hover{opacity:.85}
+  .btn-update:disabled{opacity:.4;cursor:not-allowed}
+
+  /* Stats */
+  .stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+  .stat-card{background:#fff;border-radius:12px;padding:14px 16px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .stat-card-label{font-size:11px;color:#8e8e93;margin-bottom:4px}
+  .stat-card-value{font-size:26px;font-weight:700}
+  .stat-card-value.apple{color:#007aff}
+  .stat-card-value.third{color:#ff9500}
+  .stat-card-value.total{color:#1c1c1e}
+
+  /* Tabs */
+  .tabs{display:flex;gap:0;margin-bottom:16px;background:#fff;border-radius:12px;padding:4px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .tab-btn{flex:1;padding:8px 16px;border:none;background:transparent;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;transition:all .2s;color:#8e8e93}
+  .tab-btn.active{background:#007aff;color:#fff;font-weight:600}
+  .tab-btn.active.third-tab{background:#ff9500}
+
+  /* Search */
+  .search-bar{background:#fff;border-radius:12px;padding:10px 14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;gap:8px;align-items:center}
+  .search-bar input{flex:1;border:none;outline:none;font-size:14px;background:transparent;color:#1c1c1e}
+  .search-bar input::placeholder{color:#c7c7cc}
+  .search-bar svg{width:16px;height:16px;fill:#8e8e93;flex-shrink:0}
+
+  /* Table */
+  .section{display:none}
+  .section.active{display:block}
+  .table-wrap{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .table-info{padding:12px 16px;border-bottom:1px solid #f2f2f7;font-size:12px;color:#8e8e93}
+  table{width:100%;border-collapse:collapse}
+  thead th{background:#f9f9fb;padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#8e8e93;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid #e5e5ea;white-space:nowrap}
+  tbody tr{border-bottom:1px solid #f2f2f7;transition:background .15s}
+  tbody tr:last-child{border-bottom:none}
+  tbody tr:hover{background:#f9f9fb}
+  tbody td{padding:10px 12px;vertical-align:top;font-size:13px}
+  .col-no{width:40px;color:#8e8e93;font-size:12px}
+  .col-order{white-space:nowrap;font-family:'SF Mono',monospace;font-size:12px;letter-spacing:.3px}
+  .col-date{white-space:nowrap;font-size:12px;color:#636366}
+  .col-item-no{white-space:nowrap;font-size:12px;color:#636366}
+  .col-name{min-width:160px;font-weight:500}
+  .col-model{font-size:11px;color:#8e8e93;white-space:nowrap}
+  .col-cat{font-size:11px;color:#636366}
+  .col-stock{text-align:center;font-weight:700}
+  .stock-ok{color:#34c759}
+  .col-who{font-size:12px;color:#636366}
+  .col-note{max-width:200px;font-size:12px;color:#636366}
+  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap}
+  .badge-notified{background:#fff3cd;color:#856404}
+  .badge-urgent{background:#fde8e8;color:#c0392b}
+  .badge-normal{background:#e8f4fd;color:#1565c0}
+  .badge-ok{background:#e8f8f0;color:#1a7a40}
+
+  .empty{text-align:center;padding:40px;color:#8e8e93;font-size:14px}
+  .highlight{background:#fffde7}
+
+  /* Status filter row */
+  .filter-row{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+  .filter-btn{padding:5px 12px;border:1.5px solid #e5e5ea;border-radius:20px;background:#fff;font-size:12px;font-weight:500;cursor:pointer;transition:all .18s;color:#636366;white-space:nowrap}
+  .filter-btn:hover{border-color:#007aff;color:#007aff}
+  .filter-btn.active.f-all{background:#48484a;border-color:#48484a;color:#fff;font-weight:600}
+  .filter-btn.active.f-urgent{background:#c0392b;border-color:#c0392b;color:#fff;font-weight:600}
+  .filter-btn.active.f-notified{background:#b7730a;border-color:#b7730a;color:#fff;font-weight:600}
+  .filter-btn.active.f-pending{background:#1565c0;border-color:#1565c0;color:#fff;font-weight:600}
+  .filter-cnt{display:inline-block;border-radius:10px;padding:0 5px;font-size:11px;margin-left:2px;font-variant-numeric:tabular-nums}
+  .filter-btn.active .filter-cnt{background:rgba(255,255,255,.25);color:#fff}
+  .filter-btn:not(.active) .filter-cnt{background:#f2f2f7;color:#636366}
+  /* Group toggle */
+  .group-toggle{display:flex;align-items:center;gap:5px;font-size:12px;color:#636366;cursor:pointer;margin-left:auto;white-space:nowrap;user-select:none}
+  .group-toggle input{cursor:pointer;accent-color:#007aff;width:14px;height:14px}
+  /* Group header row */
+  .group-hdr td{background:#f0f4ff;padding:7px 12px;border-top:2px solid #d0daf8;border-bottom:1px solid #d0daf8}
+  .group-hdr-no{font-family:'SF Mono',monospace;font-weight:700;font-size:13px;color:#1c1c1e;letter-spacing:.4px}
+  .group-hdr-meta{font-size:12px;color:#636366;margin-left:10px}
+  .group-hdr-cnt{margin-left:8px;background:#007aff;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:600}
+  .group-hdr-cnt.urgent{background:#c0392b}
+  .group-hdr-cnt.notified{background:#b7730a}
+  .indent-arrow{color:#c7c7cc;font-size:13px}
+
+  /* Responsive */
+  @media(max-width:768px){
+    .upload-grid{grid-template-columns:1fr}
+    .stats-row{grid-template-columns:repeat(3,1fr)}
+    table{font-size:12px}
+    thead th,tbody td{padding:8px 8px}
+    .col-model,.col-cat{display:none}
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">
+    <svg viewBox="0 0 24 24"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+  </div>
+  <h1>到貨提醒儀表板</h1>
+  <div class="header-meta" id="headerMeta">載入中…</div>
+</div>
+
+<div class="container">
+
+  <!-- Upload Section -->
+  <div class="upload-section">
+    <div class="upload-title">更新資料檔案</div>
+    <div class="upload-grid">
+      <div class="upload-card" id="card-order">
+        <input type="file" accept=".xlsx,.xls" onchange="handleFile('order',this)">
+        <div class="upload-card-icon">📋</div>
+        <div class="upload-card-label">客訂檔</div>
+        <div class="upload-card-sub" id="sub-order">客訂20260425.xlsx</div>
+      </div>
+      <div class="upload-card" id="card-apple">
+        <input type="file" accept=".xlsx,.xls" onchange="handleFile('apple',this)">
+        <div class="upload-card-icon">🍎</div>
+        <div class="upload-card-label">Apple 原廠庫存</div>
+        <div class="upload-card-sub" id="sub-apple">4/26原廠庫存.xls</div>
+      </div>
+      <div class="upload-card" id="card-third">
+        <input type="file" accept=".xlsx,.xls" onchange="handleFile('third',this)">
+        <div class="upload-card-icon">📦</div>
+        <div class="upload-card-label">副廠庫存</div>
+        <div class="upload-card-sub" id="sub-third">4/27副廠庫存.xls</div>
+      </div>
+    </div>
+    <button class="btn-update" id="btnUpdate" onclick="runUpdate()" disabled>更新完成後點此計算</button>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-card-label">Apple 原廠 待處理</div>
+      <div class="stat-card-value apple" id="statApple">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card-label">副廠配件 待處理</div>
+      <div class="stat-card-value third" id="statThird">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card-label">合計</div>
+      <div class="stat-card-value total" id="statTotal">—</div>
+    </div>
+  </div>
+
+  <!-- Tabs + Search -->
+  <div class="tabs">
+    <button class="tab-btn active" id="tab-apple" onclick="switchTab('apple')">🍎 Apple 原廠</button>
+    <button class="tab-btn third-tab" id="tab-third" onclick="switchTab('third')">📦 副廠配件</button>
+  </div>
+  <!-- Status filter -->
+  <div class="filter-row">
+    <button class="filter-btn f-all active" data-status="all" onclick="setFilter('all')">全部 <span class="filter-cnt" id="fcnt-all">—</span></button>
+    <button class="filter-btn f-urgent" data-status="urgent" onclick="setFilter('urgent')">🔴 急通知 <span class="filter-cnt" id="fcnt-urgent">—</span></button>
+    <button class="filter-btn f-notified" data-status="notified" onclick="setFilter('notified')">🟡 已通知未取 <span class="filter-cnt" id="fcnt-notified">—</span></button>
+    <button class="filter-btn f-pending" data-status="pending" onclick="setFilter('pending')">🔵 待通知 <span class="filter-cnt" id="fcnt-pending">—</span></button>
+  </div>
+  <div class="search-bar">
+    <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+    <input type="text" id="searchBox" placeholder="搜尋配裝單號、品名、貨號、銷售人員…" oninput="filterTable()">
+    <label class="group-toggle"><input type="checkbox" id="groupByOrder" onchange="filterTable()"> 依配裝單號分組</label>
+  </div>
+
+  <!-- Apple Section -->
+  <div class="section active" id="section-apple">
+    <div class="table-wrap">
+      <div class="table-info" id="info-apple">共 0 筆</div>
+      <table>
+        <thead>
+          <tr>
+            <th class="col-no">#</th>
+            <th>配裝單號</th>
+            <th>銷售日期</th>
+            <th>貨號</th>
+            <th>品名</th>
+            <th class="col-model">料號</th>
+            <th class="col-cat">分類</th>
+            <th>庫存</th>
+            <th>負責人</th>
+            <th>狀態/備註</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-apple"></tbody>
+      </table>
+      <div class="empty" id="empty-apple" style="display:none">目前無 Apple 原廠到貨提醒</div>
+    </div>
+  </div>
+
+  <!-- Third-party Section -->
+  <div class="section" id="section-third">
+    <div class="table-wrap">
+      <div class="table-info" id="info-third">共 0 筆</div>
+      <table>
+        <thead>
+          <tr>
+            <th class="col-no">#</th>
+            <th>配裝單號</th>
+            <th>銷售日期</th>
+            <th>貨號</th>
+            <th>品名</th>
+            <th class="col-model">料號</th>
+            <th class="col-cat">分類</th>
+            <th>庫存</th>
+            <th>負責人</th>
+            <th>狀態/備註</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-third"></tbody>
+      </table>
+      <div class="empty" id="empty-third" style="display:none">目前無副廠到貨提醒</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Initial embedded data ─────────────────────────────────────────────────
+const INITIAL_DATA = {"generated":"2026-04-26","orderFile":"客訂20260425","appleStockFile":"4/26 Apple原廠庫存","thirdStockFile":"4/27 副廠庫存","appleAlerts":[{"orderNo":"272262617007","saleDate":"2026/02/17","salesperson":"吳啟禎","itemNo":"253482","itemName":"iMac 24吋 M4/10CPU/10GPU/16G/512G/銀","modelNo":"MWUV3TA/A","category":"Mac","stock":1,"orderedQty":1,"unfulfilledQty":1,"note":"預購商品，貨到通知顧客取貨"},{"orderNo":"272262811021","saleDate":"2026/04/11","salesperson":"吳啟禎","itemNo":"262271","itemName":"iPhone 17 Pro 256GB-銀色","modelNo":"MG8G4ZP/A","category":"iPhone Pro","stock":2,"orderedQty":1,"unfulfilledQty":1,"note":"預購商品，貨到通知顧客取貨"},{"orderNo":"272262811023","saleDate":"2026/04/11","salesperson":"吳啟禎","itemNo":"262274","itemName":"iPhone 17 Pro 512GB-銀色","modelNo":"MG8K4ZP/A","category":"iPhone Pro","stock":1,"orderedQty":1,"unfulfilledQty":1,"note":"預購商品，貨到通知顧客取貨"},{"orderNo":"272262813007","saleDate":"2026/04/13","salesperson":"吳啟禎","itemNo":"267383","itemName":"15.3吋MBA M5/10CPU/10GPU/16G/512G/天藍","modelNo":"MDVQ4TA/A","category":"Mac","stock":2,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨"},{"orderNo":"272262813002","saleDate":"2026/04/13","salesperson":"吳啟禎","itemNo":"250060","itemName":"Lightning數位 AV轉接器","modelNo":"MW2P3FE/A","category":"iPad原廠配件","stock":3,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨"},{"orderNo":"272262815004","saleDate":"2026/04/15","salesperson":"吳啟禎","itemNo":"267382","itemName":"15.3吋MBA M5/10CPU/10GPU/16G/512G/銀","modelNo":"MDV94TA/A","category":"Mac","stock":2,"orderedQty":1,"unfulfilledQty":1,"note":"預購商品，或到通知顧客取貨"},{"orderNo":"272262817009","saleDate":"2026/04/17","salesperson":"吳啟禎","itemNo":"267382","itemName":"15.3吋MBA M5/10CPU/10GPU/16G/512G/銀","modelNo":"MDV94TA/A","category":"Mac","stock":2,"orderedQty":1,"unfulfilledQty":1,"note":"預購商品，全部一起拿，貨到通知"},{"orderNo":"272262818004","saleDate":"2026/04/18","salesperson":"史昀靈","itemNo":"262272","itemName":"iPhone 17 Pro 256GB-宇宙橙色","modelNo":"MG8H4ZP/A","category":"iPhone Pro","stock":2,"orderedQty":1,"unfulfilledQty":1,"note":"4/23已通知"},{"orderNo":"272062818001","saleDate":"2026/04/18","salesperson":"史昀靈","itemNo":"262276","itemName":"iPhone 17 Pro 512GB-藏藍色","modelNo":"MG8N4ZP/A","category":"iPhone Pro","stock":2,"orderedQty":1,"unfulfilledQty":1,"note":"4/23已通知"},{"orderNo":"272262820013","saleDate":"2026/04/20","salesperson":"吳啟禎","itemNo":"262311","itemName":"AW S11 GPS 42/太空灰鋁/黑運動錶帶-M/L","modelNo":"MEQX4TA/A","category":"Watch","stock":5,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨"},{"orderNo":"272262822012","saleDate":"2026/04/22","salesperson":"吳啟禎","itemNo":"262272","itemName":"iPhone 17 Pro 256GB-宇宙橙色","modelNo":"MG8H4ZP/A","category":"iPhone Pro","stock":2,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨"},{"orderNo":"272262823001","saleDate":"2026/04/23","salesperson":"史昀靈","itemNo":"256229","itemName":"iPhone 16e 128G-黑色","modelNo":"MD1Q4ZP/A","category":"iPhone ","stock":1,"orderedQty":1,"unfulfilledQty":1,"note":"缺貨"},{"orderNo":"272262824007","saleDate":"2026/04/24","salesperson":"吳啟禎","itemNo":"262271","itemName":"iPhone 17 Pro 256GB-銀色","modelNo":"MG8G4ZP/A","category":"iPhone Pro","stock":2,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨"},{"orderNo":"272262824004","saleDate":"2026/04/24","salesperson":"吳啟禎","itemNo":"266324","itemName":"AirTag 2-4件裝","modelNo":"MFEA4TA/A","category":"iPhone原廠配件","stock":3,"orderedQty":1,"unfulfilledQty":1,"note":"自購，貨到自取"},{"orderNo":"272062825002","saleDate":"2026/04/25","salesperson":"吳啟禎","itemNo":"267325","itemName":"iPad Air 13吋 M4 Wi-Fi 256G藍","modelNo":"MH5V4TA/A","category":"iPad Air","stock":1,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨"},{"orderNo":"272062825003","saleDate":"2026/04/25","salesperson":"吳啟禎","itemNo":"248675","itemName":"Apple Pencil Pro","modelNo":"MX2D3TA/A","category":"iPad原廠配件","stock":7,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨改教育方案結尾款"},{"orderNo":"272062825003","saleDate":"2026/04/25","salesperson":"吳啟禎","itemNo":"267289","itemName":"iPad Air 11吋 M4 Wi-Fi 128G藍","modelNo":"MH314TA/A","category":"iPad Air","stock":1,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨改教育方案結尾款"}],"thirdAlerts":[{"orderNo":"272252703010","saleDate":"2025/03/03","salesperson":"史昀靈","itemNo":"251895","itemName":"PG i16 Pro SAFE 亮面玻璃保貼","modelNo":"SAFE95876JPN","category":"Apple商品盒裝成型保貼","stock":1,"orderedQty":1,"unfulfilledQty":1,"note":"剩贈品未取"},{"orderNo":"272252716001","saleDate":"2025/03/16","salesperson":"史昀靈","itemNo":"253954","itemName":"LAUT萊德 AirPods 4 矽膠防塵保護殼-黑","modelNo":"L_AP5_POD_BK","category":"Apple Watch/AirPods 配件","stock":1,"orderedQty":1,"unfulfilledQty":1,"note":"3/28已通知"},{"orderNo":"272053007006","saleDate":"2025/06/07","salesperson":"史昀靈","itemNo":"251704","itemName":"UAG i16 Pro 全透保護殼-極透明","modelNo":"114484114343","category":"iPhone保護套袋/殼","stock":2,"orderedQty":1,"unfulfilledQty":1,"note":"6/19已通知"},{"orderNo":"272053019001","saleDate":"2025/06/19","salesperson":"史昀靈","itemNo":"242538","itemName":"Riivan USB-C TO C 100W快充傳輸線1.5M-黑","modelNo":"RCC15-BK","category":"Type-C線材","stock":1,"orderedQty":1,"unfulfilledQty":1,"note":"7/3已通知"},{"orderNo":"272253123006","saleDate":"2025/07/23","salesperson":"史昀靈","itemNo":"251704","itemName":"UAG i16 Pro 全透保護殼-極透明","modelNo":"114484114343","category":"iPhone保護套袋/殼","stock":2,"orderedQty":1,"unfulfilledQty":1,"note":"門市缺貨"},{"orderNo":"272253131003","saleDate":"2025/07/31","salesperson":"史昀靈","itemNo":"251773","itemName":"Riivan i16 Pro Max 2.5D滿版保護貼-神器版","modelNo":"RFS25IPH69P24M","category":"Apple商品盒裝成型保貼","stock":1,"orderedQty":1,"unfulfilledQty":1,"note":"門市缺貨"},{"orderNo":"272053209005","saleDate":"2025/08/09","salesperson":"史昀靈","itemNo":"256254","itemName":"PG i16e 2.5D鋼化玻璃保貼","modelNo":"2771_E111","category":"Apple商品盒裝成型保貼","stock":1,"orderedQty":1,"unfulfilledQty":1,"note":"8/30 以通 9/10 17:00 取貨"},{"orderNo":"272053311003","saleDate":"2025/09/11","salesperson":"史昀靈","itemNo":"257759","itemName":"Lifetrons 時尚兩用智能手寫筆","modelNo":"FG-3016-SIL-TW_E111","category":"其他配件","stock":2,"orderedQty":1,"unfulfilledQty":1,"note":"9/26已通知"},{"orderNo":"272253409004","saleDate":"2025/10/09","salesperson":"史昀靈","itemNo":"249744","itemName":"Riivan iPad Air 11亮面保護貼","modelNo":"RCCIPAP112024","category":"Apple商品盒裝成型保貼","stock":8,"orderedQty":1,"unfulfilledQty":1,"note":"10/25已通知"},{"orderNo":"272253504008","saleDate":"2025/11/04","salesperson":"史昀靈","itemNo":"253115","itemName":"PG AW 46mm 2in1 高透鋼化保護殼-黑","modelNo":"3717","category":"Apple Watch/AirPods 配件","stock":5,"orderedQty":1,"unfulfilledQty":1,"note":"已電聯直接轉語音信箱改發簡訊"},{"orderNo":"272253505002","saleDate":"2025/11/05","salesperson":"吳啟禎","itemNo":"261682","itemName":"OtterBox 50W雙C高效快充充電器-黑","modelNo":"78-52693_E111","category":"Apple各式轉接器","stock":3,"orderedQty":1,"unfulfilledQty":1,"note":"電話無法接聽"},{"orderNo":"272253507012","saleDate":"2025/11/07","salesperson":"史昀靈","itemNo":"261682","itemName":"OtterBox 50W雙C高效快充充電器-黑","modelNo":"78-52693_E111","category":"Apple各式轉接器","stock":3,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨"},{"orderNo":"272253509025","saleDate":"2025/11/09","salesperson":"史昀靈","itemNo":"262094","itemName":"MONOCOZZI i17 Pro Max 磁吸超薄殼","modelNo":"M-ES-67P25-TRANS","category":"iPhone保護套袋/殼","stock":7,"orderedQty":1,"unfulfilledQty":1,"note":"缺貨"},{"orderNo":"272253509025","saleDate":"2025/11/09","salesperson":"史昀靈","itemNo":"262119","itemName":"Riivan i17 Pro Max 2.5D滿版4倍高透保護貼","modelNo":"R4XIPH69P25","category":"Apple商品盒裝成型保貼","stock":11,"orderedQty":1,"unfulfilledQty":1,"note":"缺貨"},{"orderNo":"272053510001","saleDate":"2025/11/10","salesperson":"史昀靈","itemNo":"262117","itemName":"Riivan i17/17 Pro 2.5D滿版4倍高透保護貼","modelNo":"R4XIPH6325","category":"Apple商品盒裝成型保貼","stock":12,"orderedQty":1,"unfulfilledQty":1,"note":"3/31已通知"},{"orderNo":"272253513013","saleDate":"2025/11/13","salesperson":"吳啟禎","itemNo":"262094","itemName":"MONOCOZZI i17 Pro Max 磁吸超薄殼","modelNo":"M-ES-67P25-TRANS","category":"iPhone保護套袋/殼","stock":7,"orderedQty":1,"unfulfilledQty":1,"note":"已到貨通知顧客取貨"},{"orderNo":"272253513013","saleDate":"2025/11/13","salesperson":"吳啟禎","itemNo":"262119","itemName":"Riivan i17 Pro Max 2.5D滿版4倍高透保護貼","modelNo":"R4XIPH69P25","category":"Apple商品盒裝成型保貼","stock":11,"orderedQty":1,"unfulfilledQty":1,"note":"已到貨通知顧客取貨"},{"orderNo":"272053514001","saleDate":"2025/11/14","salesperson":"吳啟禎","itemNo":"262094","itemName":"MONOCOZZI i17 Pro Max 磁吸超薄殼","modelNo":"M-ES-67P25-TRANS","category":"iPhone保護套袋/殼","stock":7,"orderedQty":1,"unfulfilledQty":1,"note":"電聯轉語音信箱，以發簡訊"},{"orderNo":"272053514001","saleDate":"2025/11/14","salesperson":"吳啟禎","itemNo":"262119","itemName":"Riivan i17 Pro Max 2.5D滿版4倍高透保護貼","modelNo":"R4XIPH69P25","category":"Apple商品盒裝成型保貼","stock":11,"orderedQty":1,"unfulfilledQty":1,"note":"電聯轉語音信箱，以發簡訊"},{"orderNo":"272053515006","saleDate":"2025/11/15","salesperson":"史昀靈","itemNo":"261977","itemName":"UAG i17 Pro 全透保護殼-極透明","modelNo":"114560114343","category":"iPhone保護套袋/殼","stock":2,"orderedQty":1,"unfulfilledQty":1,"note":"缺貨"},{"orderNo":"272053515006","saleDate":"2025/11/15","salesperson":"史昀靈","itemNo":"262117","itemName":"Riivan i17/17 Pro 2.5D滿版4倍高透保護貼","modelNo":"R4XIPH6325","category":"Apple商品盒裝成型保貼","stock":12,"orderedQty":1,"unfulfilledQty":1,"note":"缺貨"},{"orderNo":"272053516001","saleDate":"2025/11/16","salesperson":"史昀靈","itemNo":"243784","itemName":"Riivan USB-C TO C 100W快充傳輸線1.5M-紅","modelNo":"RCC15-RD","category":"Type-C線材","stock":1,"orderedQty":1,"unfulfilledQty":1,"note":"門市缺貨"},{"orderNo":"272253516026","saleDate":"2025/11/16","salesperson":"史昀靈","itemNo":"262094","itemName":"MONOCOZZI i17 Pro Max 磁吸超薄殼","modelNo":"M-ES-67P25-TRANS","category":"iPhone保護套袋/殼","stock":7,"orderedQty":1,"unfulfilledQty":1,"note":"缺貨"},{"orderNo":"272253516026","saleDate":"2025/11/16","salesperson":"史昀靈","itemNo":"262119","itemName":"Riivan i17 Pro Max 2.5D滿版4倍高透保護貼","modelNo":"R4XIPH69P25","category":"Apple商品盒裝成型保貼","stock":11,"orderedQty":1,"unfulfilledQty":1,"note":"缺貨"},{"orderNo":"272253606001","saleDate":"2025/12/06","salesperson":"吳啟禎","itemNo":"261712","itemName":"PG i17 SAFE玻璃保貼-亮面","modelNo":"SA70102","category":"Apple商品盒裝成型保貼","stock":7,"orderedQty":1,"unfulfilledQty":1,"note":"已到貨通知顧客取貨"},{"orderNo":"272253609008","saleDate":"2025/12/09","salesperson":"吳啟禎","itemNo":"261712","itemName":"PG i17 SAFE玻璃保貼-亮面","modelNo":"SA70102","category":"Apple商品盒裝成型保貼","stock":7,"orderedQty":1,"unfulfilledQty":1,"note":"已到貨通知顧客取貨"},{"orderNo":"272253610010","saleDate":"2025/12/10","salesperson":"蔡育平","itemNo":"261712","itemName":"PG i17 SAFE玻璃保貼-亮面","modelNo":"SA70102","category":"Apple商品盒裝成型保貼","stock":7,"orderedQty":1,"unfulfilledQty":1,"note":"01.07X 03.08X"},{"orderNo":"272253611002","saleDate":"2025/12/11","salesperson":"史昀靈","itemNo":"261712","itemName":"PG i17 SAFE玻璃保貼-亮面","modelNo":"SA70102","category":"Apple商品盒裝成型保貼","stock":7,"orderedQty":1,"unfulfilledQty":1,"note":"缺貨"},{"orderNo":"272053616005","saleDate":"2025/12/16","salesperson":"吳啟禎","itemNo":"261712","itemName":"PG i17 SAFE玻璃保貼-亮面","modelNo":"SA70102","category":"Apple商品盒裝成型保貼","stock":7,"orderedQty":1,"unfulfilledQty":1,"note":"已到貨通知顧客取貨"},{"orderNo":"272262503005","saleDate":"2026/01/03","salesperson":"史昀靈","itemNo":"261978","itemName":"UAG i17 Pro Max 全透保護殼-極透明","modelNo":"114533114343","category":"iPhone保護套袋/殼","stock":11,"orderedQty":1,"unfulfilledQty":1,"note":"缺貨"},{"orderNo":"272262505008","saleDate":"2026/01/05","salesperson":"史昀靈","itemNo":"257458","itemName":"LoopLoop 磁吸式充電傳輸線3入組","modelNo":"MU33101","category":"Type-C線材","stock":4,"orderedQty":1,"unfulfilledQty":1,"note":"到貨電聯未接"},{"orderNo":"272262511019","saleDate":"2026/01/11","salesperson":"吳啟禎","itemNo":"264183","itemName":"PG AW 49mm 2in1 高透鋼化保護殼-黑","modelNo":"3678_E111","category":"Apple Watch/AirPods 配件","stock":2,"orderedQty":1,"unfulfilledQty":1,"note":"已到貨通知顧客取貨"},{"orderNo":"272262513004","saleDate":"2026/01/13","salesperson":"吳啟禎","itemNo":"253115","itemName":"PG AW 46mm 2in1 高透鋼化保護殼-黑","modelNo":"3717","category":"Apple Watch/AirPods 配件","stock":5,"orderedQty":1,"unfulfilledQty":1,"note":"已到貨通知顧客取貨"},{"orderNo":"272262514006","saleDate":"2026/01/14","salesperson":"吳啟禎","itemNo":"257458","itemName":"LoopLoop 磁吸式充電傳輸線3入組","modelNo":"MU33101","category":"Type-C線材","stock":4,"orderedQty":1,"unfulfilledQty":1,"note":"已到貨通知顧客取貨"},{"orderNo":"272262524017","saleDate":"2026/01/24","salesperson":"吳啟禎","itemNo":"235836","itemName":"Riivan iPad 10.9亮面保護貼","modelNo":"RCCIPA10.9","category":"Apple商品盒裝成型保貼","stock":6,"orderedQty":1,"unfulfilledQty":1,"note":"已到貨通知顧客取貨"},{"orderNo":"272262606001","saleDate":"2026/02/06","salesperson":"史昀靈","itemNo":"264392","itemName":"OVERDIGI i17 Pro Max強化玻璃保護貼","modelNo":"BG16-WW69PM","category":"Apple商品盒裝成型保貼","stock":12,"orderedQty":1,"unfulfilledQty":1,"note":"2/7已通知"},{"orderNo":"272262622016","saleDate":"2026/02/22","salesperson":"史昀靈","itemNo":"248390","itemName":"綠聯 十合一Type-C 集線器","modelNo":"15601","category":"Apple各式轉接器","stock":5,"orderedQty":1,"unfulfilledQty":1,"note":"商品停產，等待新款上市更換"},{"orderNo":"272262623003","saleDate":"2026/02/23","salesperson":"吳啟禎","itemNo":"231581","itemName":"Riivan MacBook Air M2 13.6 亮面保護貼","modelNo":"RCCMBA136","category":"Apple商品盒裝成型保貼","stock":13,"orderedQty":1,"unfulfilledQty":1,"note":"商品停產，等待新款上市更換"},{"orderNo":"272262625018","saleDate":"2026/02/25","salesperson":"吳啟禎","itemNo":"231581","itemName":"Riivan MacBook Air M2 13.6 亮面保護貼","modelNo":"RCCMBA136","category":"Apple商品盒裝成型保貼","stock":13,"orderedQty":1,"unfulfilledQty":1,"note":"商品停產，等待新款上市更換"},{"orderNo":"272262712004","saleDate":"2026/03/12","salesperson":"史昀靈","itemNo":"257458","itemName":"LoopLoop 磁吸式充電傳輸線3入組","modelNo":"MU33101","category":"Type-C線材","stock":4,"orderedQty":1,"unfulfilledQty":1,"note":"缺貨"},{"orderNo":"272262714011","saleDate":"2026/03/14","salesperson":"吳啟禎","itemNo":"257458","itemName":"LoopLoop 磁吸式充電傳輸線3入組","modelNo":"MU33101","category":"Type-C線材","stock":4,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨"},{"orderNo":"272262714013","saleDate":"2026/03/14","salesperson":"吳啟禎","itemNo":"257458","itemName":"LoopLoop 磁吸式充電傳輸線3入組","modelNo":"MU33101","category":"Type-C線材","stock":4,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨"},{"orderNo":"272262716006","saleDate":"2026/03/16","salesperson":"吳啟禎","itemNo":"257458","itemName":"LoopLoop 磁吸式充電傳輸線3入組","modelNo":"MU33101","category":"Type-C線材","stock":4,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨"},{"orderNo":"272262721002","saleDate":"2026/03/21","salesperson":"吳啟禎","itemNo":"264182","itemName":"PG AW 44mm 2in1 高透鋼化保護殼-透","modelNo":"3643_E111","category":"Apple Watch/AirPods 配件","stock":1,"orderedQty":1,"unfulfilledQty":1,"note":"預購商品，貨到通知顧客取貨"},{"orderNo":"272262727008","saleDate":"2026/03/27","salesperson":"吳啟禎","itemNo":"253115","itemName":"PG AW 46mm 2in1 高透鋼化保護殼-黑","modelNo":"3717","category":"Apple Watch/AirPods 配件","stock":5,"orderedQty":1,"unfulfilledQty":1,"note":"預購商品，貨到通知顧客取貨結尾款"},{"orderNo":"272262728010","saleDate":"2026/03/28","salesperson":"史昀靈","itemNo":"262117","itemName":"Riivan i17/17 Pro 2.5D滿版4倍高透保護貼","modelNo":"R4XIPH6325","category":"Apple商品盒裝成型保貼","stock":12,"orderedQty":1,"unfulfilledQty":1,"note":"缺貨"},{"orderNo":"272262728017","saleDate":"2026/03/28","salesperson":"史昀靈","itemNo":"262117","itemName":"Riivan i17/17 Pro 2.5D滿版4倍高透保護貼","modelNo":"R4XIPH6325","category":"Apple商品盒裝成型保貼","stock":12,"orderedQty":1,"unfulfilledQty":1,"note":"4/9已通知"},{"orderNo":"272262729020","saleDate":"2026/03/29","salesperson":"史昀靈","itemNo":"235825","itemName":"GNOVEL iPad 10.9 多角度保護殼-灰","modelNo":"GNPD20221027-02","category":"iPad保護套袋/殼","stock":2,"orderedQty":1,"unfulfilledQty":1,"note":"缺貨"},{"orderNo":"272262802008","saleDate":"2026/04/02","salesperson":"史昀靈","itemNo":"235825","itemName":"GNOVEL iPad 10.9 多角度保護殼-灰","modelNo":"GNPD20221027-02","category":"iPad保護套袋/殼","stock":2,"orderedQty":1,"unfulfilledQty":1,"note":"缺貨"},{"orderNo":"272062802002","saleDate":"2026/04/02","salesperson":"吳啟禎","itemNo":"235825","itemName":"GNOVEL iPad 10.9 多角度保護殼-灰","modelNo":"GNPD20221027-02","category":"iPad保護套袋/殼","stock":2,"orderedQty":1,"unfulfilledQty":1,"note":"缺貨"},{"orderNo":"272262805012","saleDate":"2026/04/05","salesperson":"蔡育平","itemNo":"264392","itemName":"OVERDIGI i17 Pro Max強化玻璃保護貼","modelNo":"BG16-WW69PM","category":"Apple商品盒裝成型保貼","stock":12,"orderedQty":1,"unfulfilledQty":1,"note":"貨到通知"},{"orderNo":"272262805005","saleDate":"2026/04/05","salesperson":"王姿閔","itemNo":"264392","itemName":"OVERDIGI i17 Pro Max強化玻璃保護貼","modelNo":"BG16-WW69PM","category":"Apple商品盒裝成型保貼","stock":12,"orderedQty":1,"unfulfilledQty":1,"note":"貨到通知"},{"orderNo":"272262808008","saleDate":"2026/04/08","salesperson":"吳啟禎","itemNo":"261977","itemName":"UAG i17 Pro 全透保護殼-極透明","modelNo":"114560114343","category":"iPhone保護套袋/殼","stock":2,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨"},{"orderNo":"272262809005","saleDate":"2026/04/09","salesperson":"史昀靈","itemNo":"253115","itemName":"PG AW 46mm 2in1 高透鋼化保護殼-黑","modelNo":"3717","category":"Apple Watch/AirPods 配件","stock":5,"orderedQty":1,"unfulfilledQty":1,"note":"缺貨"},{"orderNo":"272062811006","saleDate":"2026/04/11","salesperson":"吳啟禎","itemNo":"257307","itemName":"大通 TypeC 10合1高畫質影音轉換器","modelNo":"CX10-22SRA","category":"Apple各式轉接器","stock":2,"orderedQty":1,"unfulfilledQty":1,"note":"預購商品，貨到通知顧客取貨"},{"orderNo":"272262811021","saleDate":"2026/04/11","salesperson":"吳啟禎","itemNo":"267705","itemName":"UAG i17 Pro 磁吸輕量保護殼貼配件組","modelNo":"iPhone 17 Pro","category":"iPhone保護套袋/殼","stock":12,"orderedQty":1,"unfulfilledQty":1,"note":"預購商品，貨到通知顧客取貨"},{"orderNo":"272262811023","saleDate":"2026/04/11","salesperson":"吳啟禎","itemNo":"267705","itemName":"UAG i17 Pro 磁吸輕量保護殼貼配件組","modelNo":"iPhone 17 Pro","category":"iPhone保護套袋/殼","stock":12,"orderedQty":1,"unfulfilledQty":1,"note":"預購商品，貨到通知顧客取貨"},{"orderNo":"272262813007","saleDate":"2026/04/13","salesperson":"吳啟禎","itemNo":"174356","itemName":"ADAM TYPE-C公對USB母轉接器-灰","modelNo":"F13 灰","category":"Apple各式轉接器","stock":3,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨"},{"orderNo":"272262813007","saleDate":"2026/04/13","salesperson":"吳啟禎","itemNo":"240939","itemName":"Riivan MacBook Air 15 亮面抗刮保護貼","modelNo":"RCCMBA15","category":"Apple商品盒裝成型保貼","stock":5,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨"},{"orderNo":"272262813007","saleDate":"2026/04/13","salesperson":"吳啟禎","itemNo":"256605","itemName":"TUCANO Smilza都會手提電腦包15/16吋-黑","modelNo":"BSM15-BK","category":"Mac配件","stock":4,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨"},{"orderNo":"272062813004","saleDate":"2026/04/13","salesperson":"吳啟禎","itemNo":"231581","itemName":"Riivan MacBook Air M2 13.6 亮面保護貼","modelNo":"RCCMBA136","category":"Apple商品盒裝成型保貼","stock":13,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨"},{"orderNo":"272062813004","saleDate":"2026/04/13","salesperson":"吳啟禎","itemNo":"257304","itemName":"大通 TypeC 6合1高畫質影音轉換器","modelNo":"CX6-22","category":"Apple各式轉接器","stock":5,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨"},{"orderNo":"272062813004","saleDate":"2026/04/13","salesperson":"吳啟禎","itemNo":"264169","itemName":"STM Kin 筆電內襯保護套13/14吋-黑灰","modelNo":"114-483M-01","category":"Mac配件","stock":6,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨"},{"orderNo":"272262813001","saleDate":"2026/04/13","salesperson":"吳啟禎","itemNo":"231581","itemName":"Riivan MacBook Air M2 13.6 亮面保護貼","modelNo":"RCCMBA136","category":"Apple商品盒裝成型保貼","stock":13,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨改教育方案"},{"orderNo":"272262813001","saleDate":"2026/04/13","salesperson":"吳啟禎","itemNo":"264169","itemName":"STM Kin 筆電內襯保護套13/14吋-黑灰","modelNo":"114-483M-01","category":"Mac配件","stock":6,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨改教育方案"},{"orderNo":"272262815004","saleDate":"2026/04/15","salesperson":"吳啟禎","itemNo":"174356","itemName":"ADAM TYPE-C公對USB母轉接器-灰","modelNo":"F13 灰","category":"Apple各式轉接器","stock":3,"orderedQty":1,"unfulfilledQty":1,"note":"預購商品，或到通知顧客取貨"},{"orderNo":"272262815004","saleDate":"2026/04/15","salesperson":"吳啟禎","itemNo":"240939","itemName":"Riivan MacBook Air 15 亮面抗刮保護貼","modelNo":"RCCMBA15","category":"Apple商品盒裝成型保貼","stock":5,"orderedQty":1,"unfulfilledQty":1,"note":"預購商品，或到通知顧客取貨"},{"orderNo":"272262815004","saleDate":"2026/04/15","salesperson":"吳啟禎","itemNo":"256605","itemName":"TUCANO Smilza都會手提電腦包15/16吋-黑","modelNo":"BSM15-BK","category":"Mac配件","stock":4,"orderedQty":1,"unfulfilledQty":1,"note":"預購商品，或到通知顧客取貨"},{"orderNo":"272262817009","saleDate":"2026/04/17","salesperson":"吳啟禎","itemNo":"174356","itemName":"ADAM TYPE-C公對USB母轉接器-灰","modelNo":"F13 灰","category":"Apple各式轉接器","stock":3,"orderedQty":1,"unfulfilledQty":1,"note":"預購商品，全部一起拿，貨到通知"},{"orderNo":"272262817009","saleDate":"2026/04/17","salesperson":"吳啟禎","itemNo":"240939","itemName":"Riivan MacBook Air 15 亮面抗刮保護貼","modelNo":"RCCMBA15","category":"Apple商品盒裝成型保貼","stock":5,"orderedQty":1,"unfulfilledQty":1,"note":"預購商品，全部一起拿，貨到通知"},{"orderNo":"272262817009","saleDate":"2026/04/17","salesperson":"吳啟禎","itemNo":"256605","itemName":"TUCANO Smilza都會手提電腦包15/16吋-黑","modelNo":"BSM15-BK","category":"Mac配件","stock":4,"orderedQty":1,"unfulfilledQty":1,"note":"預購商品，全部一起拿，貨到通知"},{"orderNo":"272262818004","saleDate":"2026/04/18","salesperson":"史昀靈","itemNo":"267705","itemName":"UAG i17 Pro 磁吸輕量保護殼貼配件組","modelNo":"iPhone 17 Pro","category":"iPhone保護套袋/殼","stock":12,"orderedQty":1,"unfulfilledQty":1,"note":"4/23已通知"},{"orderNo":"272062818001","saleDate":"2026/04/18","salesperson":"史昀靈","itemNo":"267705","itemName":"UAG i17 Pro 磁吸輕量保護殼貼配件組","modelNo":"iPhone 17 Pro","category":"iPhone保護套袋/殼","stock":12,"orderedQty":1,"unfulfilledQty":1,"note":"4/23已通知"},{"orderNo":"272262822012","saleDate":"2026/04/22","salesperson":"吳啟禎","itemNo":"264391","itemName":"OVERDIGI i17 Pro 強化玻璃保護貼","modelNo":"BG16-WW63P","category":"Apple商品盒裝成型保貼","stock":3,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨"},{"orderNo":"272262824007","saleDate":"2026/04/24","salesperson":"吳啟禎","itemNo":"250826","itemName":"綠聯 USB-C快充線 Aluminum BRAID版-1M","modelNo":"60126","category":"Type-C線材","stock":6,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨"},{"orderNo":"272262824007","saleDate":"2026/04/24","salesperson":"吳啟禎","itemNo":"263249","itemName":"Airora i17 Pro系列 鏡頭貼-藍色","modelNo":"ARCL17PB","category":"Apple商品盒裝成型保貼","stock":2,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨"},{"orderNo":"272262824007","saleDate":"2026/04/24","salesperson":"吳啟禎","itemNo":"264391","itemName":"OVERDIGI i17 Pro 強化玻璃保護貼","modelNo":"BG16-WW63P","category":"Apple商品盒裝成型保貼","stock":3,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨"},{"orderNo":"272062825002","saleDate":"2026/04/25","salesperson":"吳啟禎","itemNo":"261739","itemName":"STM iPad Air 13吋 OPP多折式保護殼-黑","modelNo":"222-436LY-01","category":"iPad保護套袋/殼","stock":2,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨"},{"orderNo":"272062825003","saleDate":"2026/04/25","salesperson":"吳啟禎","itemNo":"249744","itemName":"Riivan iPad Air 11亮面保護貼","modelNo":"RCCIPAP112024","category":"Apple商品盒裝成型保貼","stock":8,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨改教育方案結尾款"},{"orderNo":"272062825003","saleDate":"2026/04/25","salesperson":"吳啟禎","itemNo":"258059","itemName":"JTL iPad Air 11吋筆槽透明防摔殼-淺灰","modelNo":"AR11防摔殼筆槽淺灰","category":"iPad保護套袋/殼","stock":3,"orderedQty":1,"unfulfilledQty":1,"note":"調撥中，貨到通知顧客取貨改教育方案結尾款"}]};
+
+// ── State ────────────────────────────────────────────────────────────────
+const pending = {order: null, apple: null, third: null};
+let currentData = null;
+let currentTab = 'apple';
+let activeFilter = 'all';
+const STORAGE_KEY = 'arrival_dashboard_v2';
+
+// ── Excel date conversion ────────────────────────────────────────────────
+function excelDate(serial) {
+  if (!serial || isNaN(serial)) return '';
+  const d = new Date(Math.round((Number(serial) - 25569) * 86400000));
+  const y = d.getUTCFullYear(), m = String(d.getUTCMonth()+1).padStart(2,'0'), day = String(d.getUTCDate()).padStart(2,'0');
+  return `${y}/${m}/${day}`;
+}
+
+// ── Status classification ────────────────────────────────────────────────
+function getStatus(note) {
+  const n = note || '';
+  if (/已通知|已電聯|已到貨通知/.test(n)) return 'notified';
+  if (/缺貨|門市缺貨|調撥中/.test(n)) return 'urgent';
+  return 'pending';
+}
+function getStatusLabel(s) {
+  return {urgent:'急通知', notified:'已通知未取', pending:'待通知'}[s] || s;
+}
+function getFilterLabel(f) {
+  return {all:'全部', urgent:'急通知', notified:'已通知未取', pending:'待通知'}[f] || f;
+}
+
+// ── Badge helper ─────────────────────────────────────────────────────────
+function makeBadge(note) {
+  const s = getStatus(note);
+  if (s === 'notified') return `<span class="badge badge-notified">已通知未取</span>`;
+  if (s === 'urgent')   return `<span class="badge badge-urgent">急通知</span>`;
+  return `<span class="badge badge-normal">待通知</span>`;
+}
+
+// ── Render table ─────────────────────────────────────────────────────────
+function renderTable(alerts, tbodyId, infoId, emptyId) {
+  const tbody = document.getElementById(tbodyId);
+  const info  = document.getElementById(infoId);
+  const empty = document.getElementById(emptyId);
+  const q = (document.getElementById('searchBox').value || '').toLowerCase();
+  const grouped = document.getElementById('groupByOrder').checked;
+
+  // 1. status filter
+  let filtered = activeFilter === 'all' ? alerts : alerts.filter(a => getStatus(a.note) === activeFilter);
+  // 2. search filter
+  if (q) filtered = filtered.filter(a =>
+    [a.orderNo, a.itemName, a.itemNo, a.modelNo, a.salesperson, a.category, a.note]
+      .some(v => (v||'').toLowerCase().includes(q)));
+
+  const extra = (activeFilter !== 'all' ? `，${getFilterLabel(activeFilter)}` : '') + (q ? `，搜尋「${q}」` : '');
+  info.textContent = `共 ${filtered.length} 筆${extra}`;
+
+  if (filtered.length === 0) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+
+  const hl = t => {
+    if (!q) return t || '';
+    const s = String(t||''), lo = s.toLowerCase(), i = lo.indexOf(q);
+    if (i < 0) return s;
+    return s.slice(0,i) + `<mark class="highlight">${s.slice(i,i+q.length)}</mark>` + s.slice(i+q.length);
+  };
+
+  const rowTpl = (a, idx, indented) => `
+    <tr>
+      <td class="col-no">${idx}</td>
+      <td class="col-order">${indented ? '<span class="indent-arrow">↳</span>' : hl(a.orderNo)}</td>
+      <td class="col-date">${hl(a.saleDate)}</td>
+      <td class="col-item-no">${hl(a.itemNo)}</td>
+      <td class="col-name">${hl(a.itemName)}</td>
+      <td class="col-model">${hl(a.modelNo)}</td>
+      <td class="col-cat">${hl(a.category)}</td>
+      <td class="col-stock"><span class="stock-ok">${a.stock}</span></td>
+      <td class="col-who">${hl(a.salesperson)}</td>
+      <td class="col-note">${makeBadge(a.note)}<br><span style="color:#8e8e93;font-size:11px">${hl(a.note)}</span></td>
+    </tr>`;
+
+  if (!grouped) {
+    tbody.innerHTML = filtered.map((a,i) => rowTpl(a, i+1, false)).join('');
+    return;
+  }
+
+  // Group by orderNo
+  const groups = new Map();
+  for (const a of filtered) {
+    if (!groups.has(a.orderNo)) groups.set(a.orderNo, []);
+    groups.get(a.orderNo).push(a);
+  }
+  let html = '', n = 0;
+  for (const [orderNo, items] of groups) {
+    const f = items[0];
+    // dominant status for the group badge
+    const statuses = items.map(a => getStatus(a.note));
+    const domStatus = statuses.includes('urgent') ? 'urgent' : statuses.includes('notified') ? 'notified' : 'pending';
+    html += `<tr class="group-hdr">
+      <td colspan="10">
+        <span class="group-hdr-no">${hl(orderNo)}</span>
+        <span class="group-hdr-meta">${f.saleDate}　${f.salesperson}</span>
+        <span class="group-hdr-cnt ${domStatus}">${items.length} 件　${getStatusLabel(domStatus)}</span>
+      </td>
+    </tr>`;
+    for (const a of items) html += rowTpl(a, ++n, true);
+  }
+  tbody.innerHTML = html;
+}
+
+// ── Update stats ─────────────────────────────────────────────────────────
+function updateStats(data) {
+  const a = data.appleAlerts.length, t = data.thirdAlerts.length;
+  document.getElementById('statApple').textContent = a + ' 筆';
+  document.getElementById('statThird').textContent = t + ' 筆';
+  document.getElementById('statTotal').textContent = (a+t) + ' 筆';
+  document.getElementById('headerMeta').textContent =
+    `資料日期：${data.generated || '—'} ｜ 客訂：${data.orderFile||'—'} ｜ 原廠：${data.appleStockFile||'—'} ｜ 副廠：${data.thirdStockFile||'—'}`;
+}
+
+// ── Filter counts ────────────────────────────────────────────────────────
+function updateFilterCounts() {
+  if (!currentData) return;
+  const alerts = currentTab === 'apple' ? currentData.appleAlerts : currentData.thirdAlerts;
+  const q = (document.getElementById('searchBox').value || '').toLowerCase();
+  const base = q ? alerts.filter(a =>
+    [a.orderNo, a.itemName, a.itemNo, a.modelNo, a.salesperson, a.category, a.note]
+      .some(v => (v||'').toLowerCase().includes(q))) : alerts;
+  const counts = {all: base.length, urgent: 0, notified: 0, pending: 0};
+  for (const a of base) counts[getStatus(a.note)]++;
+  ['all','urgent','notified','pending'].forEach(f => {
+    const el = document.getElementById('fcnt-'+f);
+    if (el) el.textContent = counts[f];
+  });
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.status === activeFilter);
+  });
+}
+
+// ── Set filter ───────────────────────────────────────────────────────────
+function setFilter(f) {
+  activeFilter = f;
+  updateFilterCounts();
+  if (!currentData) return;
+  renderTable(currentData.appleAlerts, 'tbody-apple', 'info-apple', 'empty-apple');
+  renderTable(currentData.thirdAlerts, 'tbody-third', 'info-third', 'empty-third');
+}
+
+// ── Full render ──────────────────────────────────────────────────────────
+function render(data) {
+  currentData = data;
+  updateStats(data);
+  updateFilterCounts();
+  renderTable(data.appleAlerts, 'tbody-apple', 'info-apple', 'empty-apple');
+  renderTable(data.thirdAlerts, 'tbody-third', 'info-third', 'empty-third');
+}
+
+// ── Tab switch ───────────────────────────────────────────────────────────
+function switchTab(tab) {
+  currentTab = tab;
+  ['apple','third'].forEach(t => {
+    document.getElementById('section-'+t).classList.toggle('active', t===tab);
+    const btn = document.getElementById('tab-'+t);
+    btn.classList.toggle('active', t===tab);
+  });
+  updateFilterCounts();
+}
+
+// ── Search filter ────────────────────────────────────────────────────────
+function filterTable() {
+  if (!currentData) return;
+  updateFilterCounts();
+  renderTable(currentData.appleAlerts, 'tbody-apple', 'info-apple', 'empty-apple');
+  renderTable(currentData.thirdAlerts, 'tbody-third', 'info-third', 'empty-third');
+}
+
+// ── Parse customer order file ────────────────────────────────────────────
+function parseOrders(wb) {
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+  const orders = [];
+  for (let i = 2; i < rows.length; i++) {
+    const r = rows[i];
+    const rawNo = r[0];
+    if (!rawNo) continue;
+    const orderNo = String(Math.round(Number(rawNo)) || rawNo).replace(/\.0+$/,'').padStart(12,'0');
+    if (!/^\d{12}$/.test(orderNo)) continue;
+    const ordered = parseInt(r[7])||0, shipped = parseInt(r[8])||0;
+    if (ordered - shipped <= 0) continue;
+    orders.push({
+      orderNo, saleDate: excelDate(r[1]),
+      salesperson: r[3]||'', itemNo: String(r[4]||'').trim(),
+      itemName: r[5]||'', modelNo: String(r[6]||'').trim(),
+      orderedQty: ordered, unfulfilledQty: ordered - shipped,
+      note: r[10]||''
+    });
+  }
+  return orders;
+}
+
+// ── Parse inventory file ─────────────────────────────────────────────────
+function parseInventory(wb) {
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+  if (rows.length < 2) return {};
+  const hdr = rows[0];
+  const idx = {};
+  ['comp_item_no','comp_item_nam','comp_model_no','comp_stk_tot','comp_desc_c'].forEach(k => {
+    idx[k] = hdr.indexOf(k);
+  });
+  const inv = {};
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    const no = String(r[idx.comp_item_no]||'').trim();
+    if (!no) continue;
+    const stk = parseFloat(r[idx.comp_stk_tot])||0;
+    inv[no] = {
+      itemName: r[idx.comp_item_nam]||'',
+      modelNo: String(r[idx.comp_model_no]||'').trim(),
+      stock: stk > 0 ? Math.round(stk) : 0,
+      category: r[idx.comp_desc_c]||''
+    };
+  }
+  return inv;
+}
+
+// ── Compute alerts ───────────────────────────────────────────────────────
+function computeAlerts(orders, appleInv, thirdInv, meta) {
+  const appleAlerts = [], thirdAlerts = [];
+  const seenA = new Set(), seenT = new Set();
+  for (const o of orders) {
+    const key = `${o.orderNo}|${o.itemNo}`;
+    if (o.itemNo in appleInv) {
+      const inv = appleInv[o.itemNo];
+      if (inv.stock > 0 && !seenA.has(key)) {
+        seenA.add(key);
+        appleAlerts.push({...o, stock: inv.stock, category: inv.category||o.category, itemName: o.itemName||inv.itemName, modelNo: o.modelNo||inv.modelNo});
+      }
+    }
+    if (o.itemNo in thirdInv) {
+      const inv = thirdInv[o.itemNo];
+      if (inv.stock > 0 && !seenT.has(key)) {
+        seenT.add(key);
+        thirdAlerts.push({...o, stock: inv.stock, category: inv.category||o.category, itemName: o.itemName||inv.itemName, modelNo: o.modelNo||inv.modelNo});
+      }
+    }
+  }
+  return {
+    generated: new Date().toISOString().slice(0,10),
+    orderFile: meta.orderFile, appleStockFile: meta.appleStockFile, thirdStockFile: meta.thirdStockFile,
+    appleAlerts, thirdAlerts
+  };
+}
+
+// ── File upload handler ──────────────────────────────────────────────────
+function handleFile(type, input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const data = new Uint8Array(e.target.result);
+    try {
+      const wb = XLSX.read(data, {type:'array', codepage: 950});
+      pending[type] = {wb, name: file.name};
+      const card = document.getElementById('card-'+type);
+      card.classList.add('loaded');
+      document.getElementById('sub-'+type).textContent = '✓ ' + file.name;
+      checkUpdateReady();
+    } catch(err) {
+      alert(`讀取 ${file.name} 失敗：${err.message}`);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function checkUpdateReady() {
+  const ready = pending.order || pending.apple || pending.third;
+  document.getElementById('btnUpdate').disabled = !ready;
+}
+
+// ── Run update ───────────────────────────────────────────────────────────
+function runUpdate() {
+  const base = currentData || INITIAL_DATA;
+  // Use new data if uploaded, otherwise keep existing parsed data
+  let orders = null, appleInv = null, thirdInv = null;
+  const meta = {
+    orderFile: base.orderFile,
+    appleStockFile: base.appleStockFile,
+    thirdStockFile: base.thirdStockFile
+  };
+
+  if (pending.order) {
+    orders = parseOrders(pending.order.wb);
+    meta.orderFile = pending.order.name.replace(/\.(xlsx?|xls)$/i,'');
+  }
+  if (pending.apple) {
+    appleInv = parseInventory(pending.apple.wb);
+    meta.appleStockFile = pending.apple.name.replace(/\.(xlsx?|xls)$/i,'');
+  }
+  if (pending.third) {
+    thirdInv = parseInventory(pending.third.wb);
+    meta.thirdStockFile = pending.third.name.replace(/\.(xlsx?|xls)$/i,'');
+  }
+
+  // If only some files updated, we need to re-compute from scratch
+  // For simplicity: if all 3 new files uploaded, full recompute
+  // Otherwise, update stored data with new inventory data only
+  if (orders && appleInv && thirdInv) {
+    const newData = computeAlerts(orders, appleInv, thirdInv, meta);
+    saveData(newData);
+    render(newData);
+    alert(`更新完成！Apple 原廠：${newData.appleAlerts.length} 筆 ／ 副廠：${newData.thirdAlerts.length} 筆`);
+  } else {
+    alert('請同時上傳三個檔案（客訂 + Apple原廠庫存 + 副廠庫存）以重新計算。\n若只更新庫存，請一次上傳全部三個檔案。');
+  }
+}
+
+// ── LocalStorage ─────────────────────────────────────────────────────────
+function saveData(data) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
+}
+
+function loadData() {
+  try {
+    const s = localStorage.getItem(STORAGE_KEY);
+    if (s) return JSON.parse(s);
+  } catch(e) {}
+  return null;
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+(function init() {
+  const stored = loadData();
+  render(stored || INITIAL_DATA);
+  if (!stored) saveData(INITIAL_DATA);
+})();
+</script>
+</body>
+</html>
